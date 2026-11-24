@@ -12,13 +12,11 @@ namespace FrameInk;
 
 internal sealed partial class FrameWindow : Window
 {
-    private static readonly Brush Edge = new SolidColorBrush(Color.FromRgb(23, 32, 47));
-    private static readonly Brush Accent = new SolidColorBrush(Color.FromRgb(71, 181, 238));
     private readonly Ink ink = new();
     private readonly InkSurface surface;
     private readonly Window overlay;
     private readonly TextBlock size = new() { Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBox status = new() { Foreground = Brushes.White, Background = Edge, BorderThickness = new(0),
+    private readonly TextBox status = new() { Foreground = Brushes.White, BorderThickness = new(0),
         IsReadOnly = true, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden };
     private readonly Button interact, settings, screen;
     private readonly Border move, leftRail, rightRail;
@@ -47,7 +45,10 @@ internal sealed partial class FrameWindow : Window
         Width = 556;
         Height = 360;
         UseLayoutRounding = true;
-        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("Toolbar.xaml", UriKind.Relative) });
+        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("Theme.xaml", UriKind.Relative) });
+        var edge = (Brush)FindResource("SurfaceBrush");
+        var accent = (Brush)FindResource("AccentBrush");
+        status.Background = edge;
 
         surface = new InkSurface(ink) { Cursor = Cursors.Pen };
         overlay = new Window { Title = "FrameInk ink", AllowsTransparency = true, WindowStyle = WindowStyle.None,
@@ -81,10 +82,10 @@ internal sealed partial class FrameWindow : Window
         grid.ColumnDefinitions.Add(new() { Width = new(8) });
         grid.ColumnDefinitions.Add(new());
         grid.ColumnDefinitions.Add(new() { Width = new(8) });
-        move = new Border { Background = Accent, Cursor = Cursors.SizeAll };
+        move = new Border { Background = accent, Cursor = Cursors.SizeAll };
         Add(grid, move, 0, 0, 3);
-        leftRail = new Border { Background = Accent };
-        rightRail = new Border { Background = Accent };
+        leftRail = new Border { Background = accent };
+        rightRail = new Border { Background = accent };
         Add(grid, leftRail, 1, 0);
         Add(grid, rightRail, 1, 2);
         var bar = new Grid();
@@ -111,7 +112,7 @@ internal sealed partial class FrameWindow : Window
         Add(bar, top, 0, 0);
         var info = new DockPanel { Margin = new(8, 0, 4, 0), LastChildFill = false };
         grip = new TextBlock { Text = "◢", Foreground = Brushes.White, FontSize = 22, Cursor = Cursors.SizeNWSE,
-            Width = 28, Background = Edge, TextAlignment = TextAlignment.Center };
+            Width = 28, Background = edge, TextAlignment = TextAlignment.Center };
         DockPanel.SetDock(grip, Dock.Right);
         info.Children.Add(grip);
         var secondary = new StackPanel { Orientation = Orientation.Horizontal };
@@ -126,7 +127,7 @@ internal sealed partial class FrameWindow : Window
         // No toolbar popups may overlap the region. The status path is selectable instead of using a tooltip.
         status.ContextMenuOpening += (_, e) => e.Handled = true;
         Add(bar, status, 2, 0);
-        Add(grid, new Border { CornerRadius = new(8), Background = Edge, Child = bar }, 2, 0, 3);
+        Add(grid, new Border { CornerRadius = new(8), Background = edge, Child = bar }, 2, 0, 3);
         Content = grid;
         AttachDrag(move, false);
         AttachDrag(grip, true);

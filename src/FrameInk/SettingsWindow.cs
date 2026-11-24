@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Microsoft.Win32;
@@ -15,39 +16,64 @@ internal static class SettingsWindow
 
     public static Values? Prompt(Window owner, Hotkey shortcut, string saveFolder)
     {
-        var panel = new StackPanel { Margin = new(22), Width = 440 };
-        var dialog = new Window { Owner = owner, Title = "FrameInk Settings", Content = panel, ShowInTaskbar = false,
-            SizeToContent = SizeToContent.WidthAndHeight, ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterScreen };
+        var dialog = new Window { Owner = owner, Title = "FrameInk Settings", ShowInTaskbar = false,
+            AllowsTransparency = true, WindowStyle = WindowStyle.None, Background = Brushes.Transparent,
+            SizeToContent = SizeToContent.WidthAndHeight, ResizeMode = ResizeMode.NoResize,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen, UseLayoutRounding = true };
+        dialog.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("Theme.xaml", UriKind.Relative) });
+        Brush Colour(string key) => (Brush)dialog.FindResource(key);
+        Style Look(string key) => (Style)dialog.FindResource(key);
 
-        panel.Children.Add(Heading("Save location"));
-        panel.Children.Add(new TextBlock { Text = "PNG and MP4 files are saved to this folder.", Margin = new(0, 4, 0, 8) });
-        var folder = new TextBox { Text = saveFolder, Padding = new(5) };
+        var layout = new StackPanel { Width = 512 };
+        var header = new DockPanel { Margin = new(18, 14, 10, 10), LastChildFill = true };
+        var close = new Button { Content = "×", Style = Look("DialogButton"), FontSize = 17, Padding = new(10, 0, 10, 0) };
+        AutomationProperties.SetName(close, "Close settings");
+        close.Click += (_, _) => dialog.DialogResult = false;
+        DockPanel.SetDock(close, Dock.Right);
+        header.Children.Add(close);
+        var title = new TextBlock { Text = "Settings", FontSize = 22, FontWeight = FontWeights.SemiBold,
+            Foreground = Colour("TextBrush"), Background = Brushes.Transparent, VerticalAlignment = VerticalAlignment.Center };
+        title.MouseLeftButtonDown += (_, e) => { if (e.LeftButton == MouseButtonState.Pressed) dialog.DragMove(); };
+        header.Children.Add(title);
+        layout.Children.Add(header);
+        layout.Children.Add(new Border { Background = Colour("AccentBrush"), Height = 2, Margin = new(18, 0, 18, 0), CornerRadius = new(1) });
+        var panel = new StackPanel { Margin = new(18, 12, 18, 16) };
+        layout.Children.Add(panel);
+        dialog.Content = new Border { Background = Colour("SurfaceBrush"), BorderBrush = Colour("OutlineBrush"),
+            BorderThickness = new(1), CornerRadius = new(11), Child = layout };
+
+        var location = Section("Save location", "PNG and MP4 files are saved to this folder.");
+        var folder = new TextBox { Text = saveFolder, Style = Look("DialogField") };
         AutomationProperties.SetName(folder, "Save folder");
-        panel.Children.Add(folder);
-        var folderActions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new(0, 6, 0, 16) };
+        location.Children.Add(folder);
+        var folderActions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new(0, 8, 0, 0) };
+        var error = new TextBlock { Foreground = Colour("ErrorBrush"), TextWrapping = TextWrapping.Wrap };
         ActionButton(folderActions, "Browse…", () =>
         {
-            var picker = new OpenFolderDialog { Title = "Choose a local FrameInk save folder" };
-            if (Directory.Exists(saveFolder)) picker.InitialDirectory = saveFolder;
-            if (picker.ShowDialog(dialog) == true) folder.Text = picker.FolderName;
+            try
+            {
+                var picker = new OpenFolderDialog { Title = "Choose a local FrameInk save folder" };
+                if (Directory.Exists(saveFolder)) picker.InitialDirectory = saveFolder;
+                if (picker.ShowDialog(dialog) == true) folder.Text = picker.FolderName;
+            }
+            catch (Exception ex) { error.Text = ex.Message; }
         });
         ActionButton(folderActions, "Use default", () => folder.Text = CaptureFolder.Default);
-        panel.Children.Add(folderActions);
+        location.Children.Add(folderActions);
 
-        panel.Children.Add(Heading("Global PNG shortcut"));
-        panel.Children.Add(new TextBlock { Text = "Choose at least one modifier and a function key.", Margin = new(0, 4, 0, 8) });
+        var keyboard = Section("Global PNG shortcut", "Choose at least one modifier and a function key.");
         var modifiers = new StackPanel { Orientation = Orientation.Horizontal };
-        var ctrl = new CheckBox { Content = "Ctrl", IsChecked = shortcut.Ctrl, Margin = new(0, 0, 12, 0) };
-        var alt = new CheckBox { Content = "Alt", IsChecked = shortcut.Alt, Margin = new(0, 0, 12, 0) };
-        var shift = new CheckBox { Content = "Shift", IsChecked = shortcut.Shift };
-        foreach (var box in new[] { ctrl, alt, shift }) modifiers.Children.Add(box);
-        panel.Children.Add(modifiers);
-        var keys = new ListBox { ItemsSource = Hotkey.Keys, SelectedItem = shortcut.Key, Margin = new(0, 6, 0, 10) };
-        panel.Children.Add(keys);
+        var ctrl = Modifier("Ctrl", shortcut.Ctrl);
+        var alt = Modifier("Alt", shortcut.Alt);
+        var shift = Modifier("Shift", shortcut.Shift);
+        keyboard.Children.Add(modifiers);
+        var keys = new ListBox { ItemsSource = Hotkey.Keys, SelectedItem = shortcut.Key, Style = Look("ShortcutKeys"), Margin = new(0, 8, 0, 0) };
+        AutomationProperties.SetName(keys, "Function key");
+        keyboard.Children.Add(keys);
 
-        var error = new TextBlock { Foreground = Brushes.Firebrick, TextWrapping = TextWrapping.Wrap, Margin = new(0, 0, 0, 6) };
         panel.Children.Add(error);
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new(0, 6, 0, 0) };
+        actions.Children.Add(new Button { Content = "Cancel", Style = Look("DialogButton"), IsCancel = true });
         Values? answer = null;
         ActionButton(actions, "Apply", () =>
         {
@@ -59,8 +85,7 @@ internal static class SettingsWindow
                 dialog.DialogResult = true;
             }
             catch (Exception ex) { error.Text = ex.Message; }
-        }).IsDefault = true;
-        actions.Children.Add(new Button { Content = "Cancel", Padding = new(12, 4, 12, 4), IsCancel = true });
+        }, "DialogPrimaryButton").IsDefault = true;
         panel.Children.Add(actions);
 
         // Do not allow the desktop's close animation to appear in the following capture.
@@ -68,15 +93,30 @@ internal static class SettingsWindow
         try { Native.ExcludeFromCapture(dialog); }
         catch { dialog.Close(); throw; }
         return dialog.ShowDialog() == true ? answer : null;
-    }
 
-    private static TextBlock Heading(string title) => new() { Text = title, FontSize = 17, FontWeight = FontWeights.SemiBold };
+        StackPanel Section(string label, string description)
+        {
+            var contents = new StackPanel { Margin = new(12) };
+            contents.Children.Add(new TextBlock { Text = label, Foreground = Colour("TextBrush"), FontSize = 15, FontWeight = FontWeights.SemiBold });
+            contents.Children.Add(new TextBlock { Text = description, Foreground = Colour("MutedTextBrush"), Margin = new(0, 3, 0, 8) });
+            panel.Children.Add(new Border { Child = contents, Background = Colour("FieldBrush"), BorderBrush = Colour("OutlineBrush"),
+                BorderThickness = new(1), CornerRadius = new(8), Margin = new(0, 0, 0, 10) });
+            return contents;
+        }
 
-    private static Button ActionButton(Panel panel, string caption, Action action)
-    {
-        var button = new Button { Content = caption, Padding = new(12, 4, 12, 4), Margin = new(0, 0, 8, 0) };
-        button.Click += (_, _) => action();
-        panel.Children.Add(button);
-        return button;
+        CheckBox Modifier(string label, bool value)
+        {
+            var box = new CheckBox { Content = label, IsChecked = value, Style = Look("ModifierChip") };
+            modifiers.Children.Add(box);
+            return box;
+        }
+
+        Button ActionButton(Panel buttons, string caption, Action action, string style = "DialogButton")
+        {
+            var button = new Button { Content = caption, Style = Look(style) };
+            button.Click += (_, _) => action();
+            buttons.Children.Add(button);
+            return button;
+        }
     }
 }

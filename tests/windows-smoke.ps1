@@ -375,9 +375,23 @@ try {
     }
 
     if ($TestHotkeyRebind) {
+        $frameRoot = $script:root
         Button 'Settings'
         $dialog = Wait-For { $h = [Desktop]::Find($process.Id,'FrameInk Settings'); if ($h -ne [intptr]::Zero) { $h } } 'Settings did not open.'
-        $frameRoot = $script:root
+        $script:root = [Windows.Automation.AutomationElement]::FromHandle($dialog)
+        $popupBounds = $script:root.Current.BoundingRectangle
+        foreach ($name in 'Save folder','Ctrl','F2','F11','Apply','Close settings') {
+            $control = Wait-For { Item $name } "Missing Settings control: $name"
+            $box = $control.Current.BoundingRectangle
+            Assert ($popupBounds.Contains($box) -and $box.Width -gt 0 -and $box.Height -gt 0) "Settings control is clipped: $name"
+        }
+        Button 'Close settings'
+        [void](Wait-For { [Desktop]::Find($process.Id,'FrameInk Settings') -eq [intptr]::Zero } 'Title-bar close button did not dismiss Settings.')
+        Assert (!(Test-Path -LiteralPath $config) -and !(Test-Path -LiteralPath $folderConfig)) 'Closing Settings unexpectedly saved preferences.'
+        $script:root = $frameRoot
+
+        Button 'Settings'
+        $dialog = Wait-For { $h = [Desktop]::Find($process.Id,'FrameInk Settings'); if ($h -ne [intptr]::Zero) { $h } } 'Settings did not open.'
         $script:root = [Windows.Automation.AutomationElement]::FromHandle($dialog)
         $folder = Item 'Save folder'
         $field = $folder.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)
