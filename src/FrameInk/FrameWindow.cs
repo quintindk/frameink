@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -25,6 +26,7 @@ internal sealed partial class FrameWindow : Window
     private Crop crop, regionBeforeFullScreen;
     private Display display;
     private Tool selectedTool;
+    private InkColour selectedColour = InkPalette.Default;
     private bool drawing, ready, placing, invalid, configuring, closing, savingPng, fullScreen;
     private (Native.Point Point, Crop Crop, bool Resize, UIElement Handle)? gesture;
     private Hotkey hotkey = Hotkey.Default;
@@ -51,29 +53,39 @@ internal sealed partial class FrameWindow : Window
         status.Background = edge;
 
         surface = new InkSurface(ink) { Cursor = Cursors.Pen };
+        var inkHost = new Grid();
+        inkHost.Children.Add(surface);
+        inkHost.Children.Add(editorLayer);
         overlay = new Window { Title = "FrameInk ink", AllowsTransparency = true, WindowStyle = WindowStyle.None,
             ResizeMode = ResizeMode.NoResize, Background = Brushes.Transparent, ShowInTaskbar = false,
-            ShowActivated = false, Topmost = true, Content = surface, Width = 1, Height = 1 };
+            ShowActivated = false, Topmost = true, Content = inkHost, Width = 1, Height = 1 };
         surface.MouseLeftButtonDown += (_, _) =>
         {
             if (!drawing || !Native.TryCursor(out var pointer)) return;
-            ink.Begin(selectedTool, InkPoint(pointer));
-            surface.CaptureMouse();
+            FinishText(keep: true);
+            if (!surface.CaptureMouse()) return;
+            var point = InkPoint(pointer);
+            if (selectedTool == Tool.Text) textDrag = point;
+            else ink.Begin(selectedTool, point, selectedColour);
             surface.InvalidateVisual();
         };
         surface.MouseMove += (_, e) =>
         {
-            if (!surface.IsMouseCaptured || e.LeftButton != MouseButtonState.Pressed || !Native.TryCursor(out var pointer)) return;
+            if (textDrag is not null || !surface.IsMouseCaptured || e.LeftButton != MouseButtonState.Pressed || !Native.TryCursor(out var pointer)) return;
             ink.Move(InkPoint(pointer));
             surface.InvalidateVisual();
         };
         surface.MouseLeftButtonUp += (_, _) =>
         {
             if (!surface.IsMouseCaptured) return;
-            if (Native.TryCursor(out var pointer)) ink.Move(InkPoint(pointer));
+            var start = textDrag;
+            if (!Native.TryCursor(out var pointer)) { surface.ReleaseMouseCapture(); return; }
+            var end = InkPoint(pointer);
+            if (start is null) ink.Move(end);
             surface.ReleaseMouseCapture();
+            if (start is { } corner) OpenTextEditor(corner, end);
         };
-        surface.LostMouseCapture += (_, _) => { ink.End(); surface.InvalidateVisual(); };
+        surface.LostMouseCapture += (_, _) => { textDrag = null; ink.End(); surface.InvalidateVisual(); };
 
         var grid = new Grid();
         grid.RowDefinitions.Add(railRow);
@@ -92,21 +104,25 @@ internal sealed partial class FrameWindow : Window
         for (int i = 0; i < 3; i++) bar.RowDefinitions.Add(new() { Height = new(31) });
         var top = new StackPanel { Orientation = Orientation.Horizontal, Margin = new(8, 1, 5, 0) };
         interact = Button(top, "Interact", () => SetDrawing(!drawing));
+        UpdateModeButton();
         foreach (Tool tool in Enum.GetValues<Tool>())
         {
             var button = new RadioButton { Content = tool == Tool.Rectangle ? "Rect" : tool.ToString(), IsChecked = tool == selectedTool,
                 GroupName = "InkTools", Foreground = Brushes.White, Padding = new(2), Margin = new(0, 1, 6, 1), VerticalContentAlignment = VerticalAlignment.Center };
             void SelectTool()
             {
+                if (selectedTool != tool) FinishText(keep: true);
                 selectedTool = tool;
+                surface.Cursor = tool == Tool.Text ? Cursors.Cross : Cursors.Pen;
                 if (!drawing) SetDrawing(true);
+                if (tool == Tool.Text && textEditor is null) ShowStatus("Drag an area for text, then type. Only the text will appear in captures.");
             }
             button.Checked += (_, _) => SelectTool();
             button.Click += (_, _) => SelectTool();
             top.Children.Add(button);
         }
-        Button(top, "Undo", () => { ink.Undo(); surface.InvalidateVisual(); });
-        Button(top, "Clear", () => { ink.Clear(); surface.InvalidateVisual(); });
+        Button(top, "Undo", () => { FinishText(keep: true); ink.Undo(); surface.InvalidateVisual(); });
+        Button(top, "Clear", () => { FinishText(keep: false); ink.Clear(); surface.InvalidateVisual(); });
         Button(top, "Save PNG", Snapshot, "PngButton");
         AddRecordButton(top);
         Add(bar, top, 0, 0);
@@ -123,10 +139,28 @@ internal sealed partial class FrameWindow : Window
         size.Margin = new(6, 0, 0, 0);
         info.Children.Add(size);
         Add(bar, info, 1, 0);
+        var footer = new DockPanel { LastChildFill = true };
+        var palette = new StackPanel { Orientation = Orientation.Horizontal, Margin = new(0, 2, 6, 0) };
+        DockPanel.SetDock(palette, Dock.Right);
+        foreach (var colour in InkPalette.Colours)
+        {
+            var swatch = new RadioButton { GroupName = "InkPalette", Background = colour.Fill,
+                Style = (Style)FindResource("ColourSwatch"), IsChecked = colour == selectedColour };
+            AutomationProperties.SetName(swatch, $"{colour.Name} ink");
+            swatch.Checked += (_, _) =>
+            {
+                FinishText(keep: true);
+                selectedColour = colour;
+                ShowStatus($"Ink colour: {colour.Name}");
+            };
+            palette.Children.Add(swatch);
+        }
+        footer.Children.Add(palette);
         status.Margin = new(8, 4, 8, 0);
         // No toolbar popups may overlap the region. The status path is selectable instead of using a tooltip.
         status.ContextMenuOpening += (_, e) => e.Handled = true;
-        Add(bar, status, 2, 0);
+        footer.Children.Add(status);
+        Add(bar, footer, 2, 0);
         Add(grid, new Border { CornerRadius = new(8), Background = edge, Child = bar }, 2, 0, 3);
         Content = grid;
         AttachDrag(move, false);
@@ -210,6 +244,7 @@ internal sealed partial class FrameWindow : Window
         if (!ready || Locked || configuring) return;
         try
         {
+            FinishText(keep: true);
             surface.ReleaseMouseCapture();
             if (fullScreen)
             {
@@ -232,6 +267,7 @@ internal sealed partial class FrameWindow : Window
         handle.MouseLeftButtonDown += (_, e) =>
         {
             if (!ready || Locked || fullScreen) return;
+            FinishText(keep: true);
             try { if (handle.CaptureMouse()) gesture = (Native.Cursor(), crop, resize, handle); }
             catch (Exception ex) { ShowStatus(ex.Message); }
             e.Handled = true;
@@ -266,12 +302,23 @@ internal sealed partial class FrameWindow : Window
         if (!ready) return;
         try
         {
+            if (!enabled) FinishText(keep: true);
             surface.ReleaseMouseCapture();
             Native.SetClickThrough(overlay, !enabled);
             drawing = enabled;
-            interact.Content = drawing ? "Draw" : "Interact";
+            UpdateModeButton();
         }
         catch (Exception ex) { ShowStatus($"Cannot change mode: {ex.Message}"); }
+    }
+
+    private void UpdateModeButton()
+    {
+        interact.Content = drawing ? "✎  Draw" : "↗  Interact";
+        AutomationProperties.SetName(interact, drawing ? "Draw" : "Interact");
+        AutomationProperties.SetHelpText(interact, drawing ? "Drawing is active. Switch to click-through Interact mode."
+            : "Clicks pass through the frame. Switch to Draw mode to annotate.");
+        interact.Style = (Style)FindResource(drawing ? "DrawMode" : "InteractMode");
+        move.Background = leftRail.Background = rightRail.Background = (Brush)FindResource(drawing ? "DrawAccentBrush" : "AccentBrush");
     }
 
     private void ValidateCrop()
@@ -309,6 +356,7 @@ internal sealed partial class FrameWindow : Window
     private void Configure()
     {
         if (!ready || Locked) return;
+        FinishText(keep: true);
         configuring = true;
         try
         {

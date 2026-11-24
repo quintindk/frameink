@@ -48,3 +48,9 @@ Verified on the same Windows session using `-TestFullScreen -TestHotkeyRebind`:
 - The short full-screen MP4 encoded at **4096 × 2160** and FFmpeg decoded it through to the end. This verified compatibility at that resolution, not sustained frame rate. Edge padding for odd dimensions passed component checks but was not tested on a physical odd-sized display.
 - Settings rejected a network path and persisted a custom local folder. PNG and MP4 saved there, and a PNG saved after restart still went there. Shortcut rebind and persistence checks also passed.
 - The themed Settings popup exposed the save folder, modifier and key controls, Apply and the custom close button without clipping at 125% scaling. The close button dismissed the popup without changing preferences. The folder picker uses standard Windows UI.
+
+## Text, colour and mode follow-up
+
+- At 125% scaling, dragging with **Text** gave the inline editor keyboard focus. The hotkey PNG captured wrapped text without an outline around the box and without interrupting typing. The draft PNG matched the committed PNG byte for byte. **Ctrl+Enter** kept the label, **Esc** discarded the next one, **Undo** removed the label, and clicks still reached the target under text in **Interact**.
+- Component checks verified text wrapping and clipping to its bounds, overflow reporting, draft cancellation, and exact compositing parity before and after commit.
+- The six swatches were present. Selecting Blue produced the same RGB in the PNG for the wrapped label and pen stroke. Switching back to Orange left the existing stroke blue. FFmpeg decoded the text take through to the end and confirmed the blue label in the same position as in the PNG, allowing for H.264 colour loss.

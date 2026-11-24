@@ -14,6 +14,7 @@ internal readonly record struct Crop(int X, int Y, int Width, int Height)
 
 internal readonly record struct Display(nint Handle, Crop Bounds, Crop Work, uint Dpi)
 {
+    private const int MinimumToolbarDip = 580;
     public int Pixels(double dip) => (int)Math.Ceiling(dip * Dpi / 96d);
     public int Border => Pixels(8);
     public int Bar => Pixels(96);
@@ -22,7 +23,7 @@ internal readonly record struct Display(nint Handle, Crop Bounds, Crop Work, uin
     {
         if (!fullScreen) return new(crop.X - Border, crop.Y - Border, crop.Width + 2 * Border, crop.Height + Border + Bar);
         int width = Math.Min(Work.Width, Pixels(650));
-        if (width < Pixels(530) || Work.Height < Bar) throw new InvalidOperationException("This monitor is too small for the toolbar.");
+        if (width < Pixels(MinimumToolbarDip) || Work.Height < Bar) throw new InvalidOperationException("This monitor is too small for the toolbar.");
         return new(Work.X + (Work.Width - width) / 2, Work.Bottom - Bar - Math.Min(Pixels(12), Work.Height - Bar), width, Bar);
     }
 
@@ -31,7 +32,7 @@ internal readonly record struct Display(nint Handle, Crop Bounds, Crop Work, uin
         int border = Border;
         int maxW = (Work.Width - 2 * border) & ~1;
         int maxH = (Work.Height - border - Bar) & ~1;
-        int minW = (Pixels(530) + 1) & ~1;
+        int minW = (Pixels(MinimumToolbarDip) + 1) & ~1;
         int minH = (Pixels(80) + 1) & ~1;
         if (maxW < minW || maxH < minH)
             throw new InvalidOperationException("This monitor's work area is too small for the frame and toolbar.");

@@ -116,6 +116,16 @@ function Shortcut([byte]$functionKey = 121) {
     }
     Wait-Pump 180
 }
+function Text-Key([byte]$key, [switch]$Ctrl) {
+    try {
+        if ($Ctrl) { [Desktop]::keybd_event(17,0,0,[uintptr]::Zero) }
+        [Desktop]::keybd_event($key,0,0,[uintptr]::Zero)
+    } finally {
+        [Desktop]::keybd_event($key,0,2,[uintptr]::Zero)
+        if ($Ctrl) { [Desktop]::keybd_event(17,0,2,[uintptr]::Zero) }
+    }
+    Wait-Pump 180
+}
 function Output([string]$extension) {
     $path = Wait-For {
         Get-ChildItem -LiteralPath $captures -Filter "*.$extension" -ErrorAction SilentlyContinue |
@@ -275,6 +285,80 @@ try {
     Button 'Draw'
     'PASS arrow, rectangle and numbered step tools through the attached toolbar'
 
+    Button 'Clear'
+    foreach ($swatch in 'Orange','Blue','Green','Yellow','White','Black') {
+        Assert (Item "$swatch ink") "Missing colour swatch: $swatch"
+    }
+    Click-Control 'Blue ink' $chrome
+    Click-Control 'Text' $chrome
+    $editRoot = [Windows.Automation.AutomationElement]::FromHandle($overlay)
+    $editCondition = [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::NameProperty, 'Annotation text')
+    $textBox = [Drawing.Rectangle]::new(90,65,160,115)
+    Drag ($crop.X+$textBox.X) ($crop.Y+$textBox.Y) ($crop.X+$textBox.Right) ($crop.Y+$textBox.Bottom) $overlay
+    $annotation = Wait-For { $editRoot.FindFirst([Windows.Automation.TreeScope]::Descendants,$editCondition) } 'Text editor did not open.'
+    Assert ($annotation.Current.HasKeyboardFocus) 'Text editor did not receive keyboard focus.'
+    [Windows.Forms.SendKeys]::SendWait('FrameInk wraps these words neatly')
+    Wait-Pump 250
+    Assert ($annotation.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value -eq 'FrameInk wraps these words neatly') 'Editor did not accept typed text.'
+    Shortcut
+    $draftPng = Output 'png'
+    Check-Pattern $draftPng $textBox
+    $image = [Drawing.Bitmap]::new($draftPng)
+    $blueInk = [Drawing.Color]::FromArgb(75,199,255).ToArgb()
+    try {
+        $lowerGlyph = $false
+        $colouredGlyph = $false
+        for ($y=$textBox.Y+38; $y -lt $textBox.Bottom; $y+=2) {
+            for ($x=$textBox.X; $x -lt $textBox.Right; $x+=2) {
+                $pixel = $image.GetPixel($x,$y)
+                $basePixel = [Desktop]::Pattern($crop.X+$x-$target.X,$crop.Y+$y-$target.Y)
+                if ($pixel.ToArgb() -ne $basePixel.ToArgb()) { $lowerGlyph = $true }
+                if ($pixel.ToArgb() -eq $blueInk) { $colouredGlyph = $true; break }
+            }
+            if ($colouredGlyph) { break }
+        }
+        Assert $lowerGlyph 'Text did not wrap to lower lines.'
+        Assert $colouredGlyph 'Text did not use the selected blue ink.'
+        $corner = [Desktop]::Pattern($crop.X+$textBox.X-$target.X,$crop.Y+$textBox.Y-$target.Y)
+        Assert ($image.GetPixel($textBox.X,$textBox.Y).ToArgb() -eq $corner.ToArgb()) 'The box boundary appeared in the PNG.'
+    } finally { $image.Dispose() }
+    Assert ($annotation.Current.HasKeyboardFocus) 'Global PNG shortcut interrupted text editing.'
+    Text-Key 13 -Ctrl
+    [void](Wait-For { !$editRoot.FindFirst([Windows.Automation.TreeScope]::Descendants,$editCondition) } 'Ctrl+Enter did not finish the label.')
+    Button 'Draw'
+    Click ($crop.X+$textBox.X+20) ($crop.Y+$textBox.Y+15) $form.Handle
+    Button 'Save PNG'
+    $textPng = Output 'png'
+    Assert ((Get-FileHash -LiteralPath $draftPng).Hash -eq (Get-FileHash -LiteralPath $textPng).Hash) 'Committed label differs from the captured draft.'
+    if (!$PngOnly) {
+        Button 'Record'
+        Wait-Pump 650
+        Button 'Stop'
+        $textVideo = Output 'mp4'
+        if ($KeepArtifacts) { "TEXT_VIDEO=$textVideo"; "TEXT_PNG=$textPng" }
+    }
+    Click-Control 'Text' $chrome
+    Drag ($crop.X+270) ($crop.Y+65) ($crop.X+440) ($crop.Y+180) $overlay
+    $annotation = Wait-For { $editRoot.FindFirst([Windows.Automation.TreeScope]::Descendants,$editCondition) } 'Second text editor did not open.'
+    Assert ($annotation.Current.HasKeyboardFocus) 'Second text editor did not receive keyboard focus.'
+    [Windows.Forms.SendKeys]::SendWait('Discard this draft')
+    Text-Key 27
+    Button 'Save PNG'
+    Assert ((Get-FileHash -LiteralPath (Output 'png')).Hash -eq (Get-FileHash -LiteralPath $textPng).Hash) 'Escape did not discard the new text.'
+    Button 'Undo'
+    Button 'Save PNG'
+    Check-Pattern (Output 'png') ([Drawing.Rectangle]::Empty)
+    Click-Control 'Pen' $chrome
+    Drag ($crop.X+450) ($crop.Y+100) ($crop.X+510) ($crop.Y+100) $overlay
+    Click-Control 'Orange ink' $chrome
+    Button 'Save PNG'
+    $blueStroke = [Drawing.Bitmap]::new((Output 'png'))
+    try { Assert ($blueStroke.GetPixel(480,100).ToArgb() -eq $blueInk) 'Pen did not share the text colour or its stroke was recoloured.' }
+    finally { $blueStroke.Dispose() }
+    Button 'Clear'
+    Button 'Draw'
+    'PASS inline text, invisible wrapping bounds, mid-edit PNG, Ctrl+Enter, Escape, click-through, Undo and shared six-colour palette'
+
     if (!$PngOnly) {
         Button 'Clear'
         Button 'Record'
@@ -288,7 +372,7 @@ try {
         Drag ($crop.X+100) ($crop.Y+100) ($crop.X+170) ($crop.Y+100) $overlay
         Button 'Draw'
         Click ($crop.X+130) ($crop.Y+100) $form.Handle
-        Assert ($script:targetClicks -eq 3) 'Interact did not let clicks through during recording.'
+        Assert ($script:targetClicks -eq 4) 'Interact did not let clicks through during recording.'
         Shortcut
         $mid = Output 'png'
         Assert ((Get-FileHash -LiteralPath $mid).Hash -eq (Get-FileHash -LiteralPath $annotated).Hash) 'Mid-take PNG did not match the stand-alone PNG.'

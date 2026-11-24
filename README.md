@@ -16,9 +16,13 @@ Build and run from a Windows path. WSL can be used to edit the repository, but a
 ## Use it
 
 1. Drag the blue top rail to move the frame or the `◢` grip to resize it. **Full screen** selects the entire monitor the frame is on, including the taskbar. **Restore region** returns to the previous size and position. The toolbar shows the physical pixel dimensions and floats over the desktop in full-screen mode without appearing in captures.
-2. **Interact** is click-through, even over visible ink. Click **Interact** to switch to **Draw**, or choose **Pen**, **Arrow**, **Rect** or **Step** to enter Draw directly. Use **Undo** or **Clear** to edit marks. Switching mode preserves them.
+2. Blue **↗ Interact** lets clicks through, even over visible annotations. Amber **✎ Draw** takes drawing input. Click the mode button to switch, or choose **Pen**, **Arrow**, **Rect**, **Step** or **Text** to enter Draw directly. Use **Undo** or **Clear** to edit marks. Switching mode preserves them.
 3. Use **Save PNG** or **Ctrl+Shift+F10**, in or out of a take. Use **Settings** to change the save folder or shortcut before recording. A hotkey collision does not disable the toolbar button or discard a working shortcut.
 4. Press **Record** to start and **Stop** to finalise. The frame stays locked while recording and finalising. You can draw, switch modes and take PNGs without stopping the recording. **Close** during a take finalises it first and leaves the result visible. Press **Close** again to exit.
+
+Choose an ink colour from the six swatches on the toolbar. Every tool uses the selected colour for new marks. Changing it does not recolour existing marks.
+
+To add a caption, choose **Text**, drag its bounds, then type. Text wraps at the width you dragged, and only the glyphs appear in captures. **Enter** adds a line, **Ctrl+Enter** or clicking elsewhere keeps the label, and **Esc** discards it. If the text exceeds the chosen height, shorten it or draw a taller box. PNGs and recordings include the current text, not the cursor or selection.
 
 The default save folder is `%LOCALAPPDATA%\FrameInk\Captures`. Choose **Settings → Save location** to use another local fixed drive folder for both formats. The choice persists across restarts and does not move existing files. Network paths, linked directories and known OneDrive folders are rejected. The status line shows the save path and can be selected and copied. FrameInk does not upload, use an account, collect telemetry or record audio. Capture honours Windows protection and exclusion, so protected or excluded surfaces may be missing or blank.
 

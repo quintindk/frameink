@@ -7,6 +7,7 @@
     <SolidColorBrush x:Key="TextBrush" Color="#F1F5FA" />
     <SolidColorBrush x:Key="MutedTextBrush" Color="#B2C2D5" />
     <SolidColorBrush x:Key="AccentBrush" Color="#47B5EE" />
+    <SolidColorBrush x:Key="DrawAccentBrush" Color="#FFBD69" />
     <SolidColorBrush x:Key="PrimaryBrush" Color="#126CA3" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#FFAFB8" />
     <Style x:Key="ToolbarButton" TargetType="Button">
@@ -34,6 +35,44 @@
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Pill" Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="InteractMode" TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+        <Setter Property="Background" Value="#174C68" />
+        <Setter Property="Foreground" Value="#E4F6FF" />
+        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="MinWidth" Value="88" />
+    </Style>
+    <Style x:Key="DrawMode" TargetType="Button" BasedOn="{StaticResource InteractMode}">
+        <Setter Property="Background" Value="#64401C" />
+        <Setter Property="Foreground" Value="#FFF0D8" />
+        <Setter Property="BorderBrush" Value="{StaticResource DrawAccentBrush}" />
+    </Style>
+    <Style x:Key="ColourSwatch" TargetType="RadioButton">
+        <Setter Property="Width" Value="25" />
+        <Setter Property="Height" Value="25" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid Background="Transparent">
+                        <Ellipse x:Name="Ring" Margin="1" Stroke="Transparent" StrokeThickness="2" />
+                        <Ellipse Margin="5" Fill="{TemplateBinding Background}" Stroke="{StaticResource MutedTextBrush}" StrokeThickness="1" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Ring" Property="Stroke" Value="{StaticResource MutedTextBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Ring" Property="Stroke" Value="{StaticResource TextBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Ring" Property="Stroke" Value="{StaticResource AccentBrush}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
