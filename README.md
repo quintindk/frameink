@@ -2,6 +2,8 @@
 
 FrameInk is a native Windows recorder with a persistent, movable capture frame and live annotations. It saves local PNGs and silent H.264 MP4s. It does not capture until you press **Save PNG**, use the global PNG shortcut, or press **Record**.
 
+[Download the latest Windows x64 release](https://github.com/quintindk/frameink/releases/latest), extract the ZIP, and run `FrameInk.exe`. The portable build includes the .NET runtime and is unsigned. Each release includes a SHA-256 checksum for the ZIP.
+
 ## Build and run
 
 Use the **Windows** .NET 10 SDK and an interactive Windows desktop. The capture exclusion API requires Windows 10 version 2004 or later. This build was tested on Windows 11. Recording needs Windows Media Foundation and its H.264 encoder. Windows N editions may need the Media Feature Pack. No third-party runtime tools are required.
@@ -34,3 +36,13 @@ The default save folder is `%LOCALAPPDATA%\FrameInk\Captures`. Choose **Settings
 - A display change invalidates the selected region. If recording, FrameInk stops capture and tries to finalise the valid portion. Drag the top rail to reselect a custom region, or choose **Restore region** and then **Full screen** to use the whole monitor again.
 
 See the [MVP specification](docs/spec.md) and [Windows tests and results](docs/windows-smoke.md).
+
+## Releases
+
+GitHub Actions builds and runs the automated component checks on Windows for pushes and pull requests to `main`. A pushed version tag such as `v0.1.0` runs those checks before publishing the ZIP and checksum to [GitHub Releases](https://github.com/quintindk/frameink/releases). A tag with a prerelease suffix publishes a prerelease. Desktop smoke checks still run manually on an interactive Windows session.
+
+To package a version locally on Windows:
+
+```powershell
+.\scripts\package-release.ps1 -Version 0.1.0
+```

@@ -1,0 +1,75 @@
+name: Windows CI and release
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: 'true'
+
+jobs:
+  build-test:
+    name: Build and test on Windows
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build with warnings treated as errors
+        run: dotnet build tests/FrameInk.Checks/FrameInk.Checks.csproj -c Release -warnaserror
+      - name: Run component checks
+        run: dotnet run --project tests/FrameInk.Checks/FrameInk.Checks.csproj -c Release --no-build
+
+  release:
+    name: Publish Windows x64 release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build-test
+    runs-on: windows-2025
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ github.ref }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Package the tagged version
+        run: ./scripts/package-release.ps1 -Version $env:GITHUB_REF_NAME.Substring(1)
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $zip = "artifacts/FrameInk-$($tag.Substring(1))-win-x64.zip"
+          $checksum = "$zip.sha256"
+          $remote = $env:GITHUB_REPOSITORY
+          $existing = gh release view $tag --repo $remote --json isDraft,assets 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $release = $existing | ConvertFrom-Json
+            $names = $release.assets.name
+            if (!$release.isDraft -and $names -contains (Split-Path -Leaf $zip) -and $names -contains (Split-Path -Leaf $checksum)) {
+              Write-Output "Release $tag already exists with both assets."
+              exit 0
+            }
+            throw "Release $tag exists but isn't complete. Inspect its draft and assets before retrying."
+          }
+          $notes = 'Download the Windows x64 ZIP, extract it, and run `FrameInk.exe`. The ZIP includes the .NET runtime. The build is unsigned and a SHA-256 checksum is included.'
+          $options = @('--repo', $remote, '--verify-tag', '--title', "FrameInk $tag", '--notes', $notes, '--generate-notes')
+          if ($tag -like '*-*') { $options += '--prerelease' }
+          gh release create $tag $zip $checksum @options
+          if ($LASTEXITCODE -ne 0) { throw "Publishing $tag failed (exit $LASTEXITCODE)." }
