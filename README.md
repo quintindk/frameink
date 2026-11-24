@@ -1,8 +1,22 @@
-# FrameInk
+# <img src="src/FrameInk/Assets/FrameInk.svg" alt="" width="32" height="32"> FrameInk
 
 FrameInk is a native Windows recorder with a persistent, movable capture frame and live annotations. It saves local PNGs and silent H.264 MP4s. It does not capture until you press **Save PNG**, use the global PNG shortcut, or press **Record**.
 
-[Download the latest Windows x64 release](https://github.com/quintindk/frameink/releases/latest), extract the ZIP, and run `FrameInk.exe`. The portable build includes the .NET runtime and is unsigned. Each release includes a SHA-256 checksum for the ZIP.
+## Install
+
+On Windows x64, download and review the [PowerShell installer](scripts/install.ps1), then run it from PowerShell:
+
+```powershell
+$installer = Join-Path $env:TEMP 'Install-FrameInk.ps1'
+Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/quintindk/frameink/main/scripts/install.ps1' -OutFile $installer
+notepad $installer
+# After reviewing the script:
+& $installer
+```
+
+The installer verifies the release ZIP's SHA-256 checksum, installs for the current user under `%LOCALAPPDATA%\Programs\FrameInk` and adds **FrameInk** to the Start menu. No administrator rights are needed. Use `& $installer -DesktopShortcut` to add a desktop shortcut, `-Version v0.1.0` to select a version, or `-RequireSignature` to reject unsigned builds. If PowerShell blocks the downloaded script, use `Unblock-File $installer` only after reviewing it and trusting the source. The installer does not change execution policy.
+
+For a portable copy, [download the Windows x64 ZIP](https://github.com/quintindk/frameink/releases/latest), extract it, and run `FrameInk.exe`. The ZIP includes the .NET runtime. Current builds are unsigned. See [Windows code signing](docs/code-signing.md).
 
 ## Build and run
 
@@ -46,6 +60,8 @@ To package a version locally on Windows:
 ```powershell
 .\scripts\package-release.ps1 -Version 0.1.0
 ```
+
+The Windows icon is built from [its SVG source](src/FrameInk/Assets/FrameInk.svg). To regenerate the `.ico`, run `python scripts/build-icon.py` with FFmpeg's `librsvg` decoder installed. Normal builds use the checked-in icon and do not need FFmpeg.
 
 ## Licence
 

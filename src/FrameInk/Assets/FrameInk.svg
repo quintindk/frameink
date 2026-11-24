@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="FrameInk">
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="#17202f" stroke="#40536b" stroke-width="4"/>
+  <path d="M53 91 V53 H91 M165 53 H203 V91 M203 165 V203 H165 M91 203 H53 V165"
+        fill="none" stroke="#47b5ee" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M70 151 C90 133 112 105 133 103 C148 102 150 113 139 125
+           C130 136 127 145 136 150 C148 157 166 141 186 117"
+        fill="none" stroke="#ffbd69" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

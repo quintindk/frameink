@@ -7,8 +7,10 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/FrameInk.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="FrameInk.Checks" />
+    <Resource Include="Assets/FrameInk.ico" />
   </ItemGroup>
 </Project>

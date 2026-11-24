@@ -16,7 +16,7 @@ internal static class SettingsWindow
 
     public static Values? Prompt(Window owner, Hotkey shortcut, string saveFolder)
     {
-        var dialog = new Window { Owner = owner, Title = "FrameInk Settings", ShowInTaskbar = false,
+        var dialog = new Window { Owner = owner, Title = "FrameInk Settings", Icon = owner.Icon, ShowInTaskbar = false,
             AllowsTransparency = true, WindowStyle = WindowStyle.None, Background = Brushes.Transparent,
             SizeToContent = SizeToContent.WidthAndHeight, ResizeMode = ResizeMode.NoResize,
             WindowStartupLocation = WindowStartupLocation.CenterScreen, UseLayoutRounding = true };

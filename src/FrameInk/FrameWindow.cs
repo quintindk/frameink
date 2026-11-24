@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace FrameInk;
@@ -39,6 +40,7 @@ internal sealed partial class FrameWindow : Window
     public FrameWindow()
     {
         Title = "FrameInk";
+        Icon = BitmapFrame.Create(new Uri("pack://application:,,,/Assets/FrameInk.ico"));
         Topmost = true;
         AllowsTransparency = true;
         WindowStyle = WindowStyle.None;
