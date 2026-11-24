@@ -17,7 +17,7 @@ internal sealed partial class FrameWindow
     private bool Locked => take is not null;
     private string RecordingCaption => Locked ? (finishing ? "  |  FINALISING" : "  |  ● REC") : "";
 
-    private void AddRecordButton(Panel panel) => recordButton = Button(panel, "Record", RecordOrStop);
+    private void AddRecordButton(Panel panel) => recordButton = Button(panel, "Record", RecordOrStop, "RecordingButton");
 
     private void RecordOrStop()
     {
@@ -26,7 +26,7 @@ internal sealed partial class FrameWindow
         try
         {
             ValidateCrop();
-            string path = Capture.OutputPath(".mp4");
+            string path = Capture.OutputPath(".mp4", saveFolder);
             var first = Capture.Grab(crop, ink);
             var active = take = new Take(first, path);
             SetRecordingUI();
@@ -102,6 +102,7 @@ internal sealed partial class FrameWindow
         recordButton.IsEnabled = !finishing;
         recordButton.Content = take is null ? "Record" : "Stop";
         settings.IsEnabled = !Locked;
+        screen.IsEnabled = !Locked;
         move.Cursor = Locked ? Cursors.Arrow : Cursors.SizeAll;
         grip.Cursor = Locked ? Cursors.Arrow : Cursors.SizeNWSE;
         UpdateSize();
@@ -110,7 +111,7 @@ internal sealed partial class FrameWindow
     private void DisplayInvalidated()
     {
         if (!invalid) return;
-        const string message = "Display changed. Drag the top rail to reselect the region.";
+        string message = $"Display changed. {ReselectHint}";
         if (take is { } active) { _ = Stop(active, message); }
         else ShowStatus(message);
     }

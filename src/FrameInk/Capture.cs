@@ -60,33 +60,8 @@ internal static class Capture
         catch { if (created) RemoveStagingFile(staging); throw; }
     }
 
-    public static string OutputPath(string extension)
-    {
-        // Do not use redirected Pictures/OneDrive folders for local-only capture.
-        string root = Path.GetPathRoot(Environment.SystemDirectory)!;
-        string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FrameInk", "Captures");
-        if (!string.Equals(Path.GetPathRoot(folder), root, StringComparison.OrdinalIgnoreCase)
-            || new DriveInfo(root).DriveType != DriveType.Fixed)
-            throw new IOException("FrameInk needs a local capture folder on the Windows system drive.");
-        // Refuse directory junctions and sync-provider reparse points rather than following them.
-        CheckDirectories(folder);
-        Directory.CreateDirectory(folder);
-        CheckDirectories(folder);
-        return Path.Combine(folder, $"FrameInk-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}" + extension);
-    }
-
-    private static void CheckDirectories(string path)
-    {
-        for (var directory = new DirectoryInfo(path); directory is not null; directory = directory.Parent)
-        {
-            FileAttributes attributes;
-            try { attributes = File.GetAttributes(directory.FullName); }
-            catch (FileNotFoundException) { continue; }
-            catch (DirectoryNotFoundException) { continue; }
-            if ((attributes & FileAttributes.ReparsePoint) != 0)
-                throw new IOException($"Capture directory must not be a link: {directory.FullName}");
-        }
-    }
+    public static string OutputPath(string extension, string folder) => Path.Combine(CaptureFolder.Ensure(folder),
+        $"FrameInk-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}" + extension);
 
     internal static void RemoveStagingFile(string path)
     {

@@ -12,23 +12,25 @@ namespace FrameInk;
 
 internal sealed partial class FrameWindow : Window
 {
-    private static readonly Brush Edge = new SolidColorBrush(Color.FromRgb(43, 52, 65));
-    private static readonly Brush Accent = new SolidColorBrush(Color.FromRgb(48, 178, 230));
+    private static readonly Brush Edge = new SolidColorBrush(Color.FromRgb(23, 32, 47));
+    private static readonly Brush Accent = new SolidColorBrush(Color.FromRgb(71, 181, 238));
     private readonly Ink ink = new();
     private readonly InkSurface surface;
     private readonly Window overlay;
     private readonly TextBlock size = new() { Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBox status = new() { Foreground = Brushes.White, Background = Edge, BorderThickness = new(0),
         IsReadOnly = true, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden };
-    private readonly Button interact, settings;
-    private readonly Border move;
+    private readonly Button interact, settings, screen;
+    private readonly Border move, leftRail, rightRail;
+    private readonly RowDefinition railRow = new() { Height = new(8) };
     private readonly TextBlock grip;
-    private Crop crop;
+    private Crop crop, regionBeforeFullScreen;
     private Display display;
     private Tool selectedTool;
-    private bool drawing, ready, placing, invalid, configuring, closing, savingPng;
+    private bool drawing, ready, placing, invalid, configuring, closing, savingPng, fullScreen;
     private (Native.Point Point, Crop Crop, bool Resize, UIElement Handle)? gesture;
     private Hotkey hotkey = Hotkey.Default;
+    private string saveFolder = CaptureFolder.Default;
     private int hotkeyId;
 
     [STAThread]
@@ -45,6 +47,7 @@ internal sealed partial class FrameWindow : Window
         Width = 556;
         Height = 360;
         UseLayoutRounding = true;
+        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("Toolbar.xaml", UriKind.Relative) });
 
         surface = new InkSurface(ink) { Cursor = Cursors.Pen };
         overlay = new Window { Title = "FrameInk ink", AllowsTransparency = true, WindowStyle = WindowStyle.None,
@@ -72,7 +75,7 @@ internal sealed partial class FrameWindow : Window
         surface.LostMouseCapture += (_, _) => { ink.End(); surface.InvalidateVisual(); };
 
         var grid = new Grid();
-        grid.RowDefinitions.Add(new() { Height = new(8) });
+        grid.RowDefinitions.Add(railRow);
         grid.RowDefinitions.Add(new());
         grid.RowDefinitions.Add(new() { Height = new(96) });
         grid.ColumnDefinitions.Add(new() { Width = new(8) });
@@ -80,16 +83,18 @@ internal sealed partial class FrameWindow : Window
         grid.ColumnDefinitions.Add(new() { Width = new(8) });
         move = new Border { Background = Accent, Cursor = Cursors.SizeAll };
         Add(grid, move, 0, 0, 3);
-        Add(grid, new Border { Background = Accent }, 1, 0);
-        Add(grid, new Border { Background = Accent }, 1, 2);
-        var bar = new Grid { Background = Edge };
+        leftRail = new Border { Background = Accent };
+        rightRail = new Border { Background = Accent };
+        Add(grid, leftRail, 1, 0);
+        Add(grid, rightRail, 1, 2);
+        var bar = new Grid();
         for (int i = 0; i < 3; i++) bar.RowDefinitions.Add(new() { Height = new(31) });
-        var top = new StackPanel { Orientation = Orientation.Horizontal, Margin = new(5, 2, 4, 0) };
+        var top = new StackPanel { Orientation = Orientation.Horizontal, Margin = new(8, 1, 5, 0) };
         interact = Button(top, "Interact", () => SetDrawing(!drawing));
         foreach (Tool tool in Enum.GetValues<Tool>())
         {
             var button = new RadioButton { Content = tool == Tool.Rectangle ? "Rect" : tool.ToString(), IsChecked = tool == selectedTool,
-                GroupName = "InkTools", Padding = new(2), Margin = new(0, 1, 6, 1), VerticalContentAlignment = VerticalAlignment.Center };
+                GroupName = "InkTools", Foreground = Brushes.White, Padding = new(2), Margin = new(0, 1, 6, 1), VerticalContentAlignment = VerticalAlignment.Center };
             void SelectTool()
             {
                 selectedTool = tool;
@@ -101,7 +106,7 @@ internal sealed partial class FrameWindow : Window
         }
         Button(top, "Undo", () => { ink.Undo(); surface.InvalidateVisual(); });
         Button(top, "Clear", () => { ink.Clear(); surface.InvalidateVisual(); });
-        Button(top, "Save PNG", Snapshot);
+        Button(top, "Save PNG", Snapshot, "PngButton");
         AddRecordButton(top);
         Add(bar, top, 0, 0);
         var info = new DockPanel { Margin = new(8, 0, 4, 0), LastChildFill = false };
@@ -110,16 +115,18 @@ internal sealed partial class FrameWindow : Window
         DockPanel.SetDock(grip, Dock.Right);
         info.Children.Add(grip);
         var secondary = new StackPanel { Orientation = Orientation.Horizontal };
-        settings = Button(secondary, "Hotkey", Configure);
+        screen = Button(secondary, "Full screen", ToggleFullScreen);
+        settings = Button(secondary, "Settings", Configure);
         Button(secondary, "Close", Close);
         info.Children.Add(secondary);
+        size.Margin = new(6, 0, 0, 0);
         info.Children.Add(size);
         Add(bar, info, 1, 0);
         status.Margin = new(8, 4, 8, 0);
         // No toolbar popups may overlap the region. The status path is selectable instead of using a tooltip.
         status.ContextMenuOpening += (_, e) => e.Handled = true;
         Add(bar, status, 2, 0);
-        Add(grid, bar, 2, 0, 3);
+        Add(grid, new Border { CornerRadius = new(8), Background = Edge, Child = bar }, 2, 0, 3);
         Content = grid;
         AttachDrag(move, false);
         AttachDrag(grip, true);
@@ -134,9 +141,9 @@ internal sealed partial class FrameWindow : Window
         grid.Children.Add(element);
     }
 
-    private static Button Button(Panel panel, string text, Action action)
+    private Button Button(Panel panel, string text, Action action, string style = "ToolbarButton")
     {
-        var button = new Button { Content = text, Padding = new(6, 2, 6, 2), Margin = new(0, 1, 4, 1) };
+        var button = new Button { Content = text, Style = (Style)FindResource(style) };
         button.Click += (_, _) => action();
         panel.Children.Add(button);
         return button;
@@ -164,23 +171,32 @@ internal sealed partial class FrameWindow : Window
             Register(hotkey, persist: false);
             if (settingsError is not null && hotkeyId != 0)
                 ShowStatus($"Hotkey settings could not be loaded: {settingsError} Using {hotkey}.");
+            try { saveFolder = CaptureFolder.Load(); }
+            catch (Exception ex) { ShowStatus($"Save folder setting could not be loaded: {ex.Message} Using the default folder."); }
         }
         catch (Exception ex) { ShowStatus($"Frame unavailable: {ex.Message}"); }
     }
 
-    private void Apply(Display target, Crop request)
+    private void Apply(Display target, Crop request, bool wholeMonitor = false)
     {
-        Crop next = target.Fit(request);
+        Crop next = wholeMonitor ? target.Bounds : target.Fit(request);
+        Crop chrome = target.Chrome(next, wholeMonitor);
+        bool changingMode = fullScreen != wholeMonitor;
         placing = true;
         try
         {
-            int b = target.Border;
-            Native.Place(this, new(next.X - b, next.Y - b, next.Width + 2 * b, next.Height + b + target.Bar));
+            Native.Place(this, chrome);
             Native.Place(overlay, next);
             if (Native.Client(Native.Handle(overlay)) != next) throw new InvalidOperationException("Overlay position does not match the capture region.");
+            if (changingMode) ink.Translate(crop.X - next.X, crop.Y - next.Y);
+            fullScreen = wholeMonitor;
+            railRow.Height = new(wholeMonitor ? 0 : 8);
+            move.Visibility = leftRail.Visibility = rightRail.Visibility = grip.Visibility = wholeMonitor ? Visibility.Collapsed : Visibility.Visible;
+            screen.Content = wholeMonitor ? "Restore region" : "Full screen";
             crop = next;
             display = target;
             surface.Crop = crop;
+            surface.Toolbar = wholeMonitor ? chrome : null;
             surface.InvalidateVisual();
             invalid = false;
             UpdateSize();
@@ -188,11 +204,33 @@ internal sealed partial class FrameWindow : Window
         finally { placing = false; }
     }
 
+    private void ToggleFullScreen()
+    {
+        if (!ready || Locked || configuring) return;
+        try
+        {
+            surface.ReleaseMouseCapture();
+            if (fullScreen)
+            {
+                var previous = regionBeforeFullScreen;
+                Apply(Native.MonitorAt(previous.X, previous.Y), previous);
+                ShowStatus("Restored the previous capture region.");
+            }
+            else
+            {
+                regionBeforeFullScreen = crop;
+                Apply(Native.MonitorAt(crop.X + crop.Width / 2, crop.Y + crop.Height / 2), crop, wholeMonitor: true);
+                ShowStatus("Full screen: the toolbar stays available but is excluded from captures.");
+            }
+        }
+        catch (Exception ex) { invalid = true; ShowStatus($"Cannot change capture area: {ex.Message}"); }
+    }
+
     private void AttachDrag(UIElement handle, bool resize)
     {
         handle.MouseLeftButtonDown += (_, e) =>
         {
-            if (!ready || Locked) return;
+            if (!ready || Locked || fullScreen) return;
             try { if (handle.CaptureMouse()) gesture = (Native.Cursor(), crop, resize, handle); }
             catch (Exception ex) { ShowStatus(ex.Message); }
             e.Handled = true;
@@ -241,11 +279,10 @@ internal sealed partial class FrameWindow : Window
         nint frameHwnd = Native.Handle(this), inkHwnd = Native.Handle(overlay);
         if (invalid || Native.MonitorAt(crop.X, crop.Y) != display
             || Native.GetDpiForWindow(frameHwnd) != display.Dpi || Native.GetDpiForWindow(inkHwnd) != display.Dpi
-            || Native.Client(inkHwnd) != crop || Native.Client(frameHwnd) !=
-                new Crop(crop.X - display.Border, crop.Y - display.Border, crop.Width + 2 * display.Border, crop.Height + display.Border + display.Bar))
+            || Native.Client(inkHwnd) != crop || Native.Client(frameHwnd) != display.Chrome(crop, fullScreen))
         {
             invalid = true;
-            throw new InvalidOperationException("Capture region changed. Drag the top rail to reselect it.");
+            throw new InvalidOperationException($"Capture region changed. {ReselectHint}");
         }
         if (!Native.IsCaptureExcludedAndVisible(this) || !Native.IsCaptureExcludedAndVisible(overlay))
             throw new InvalidOperationException("The frame must be visible with Windows capture exclusion enabled.");
@@ -258,7 +295,7 @@ internal sealed partial class FrameWindow : Window
         try
         {
             ValidateCrop();
-            string path = Capture.OutputPath(".png");
+            string path = Capture.OutputPath(".png", saveFolder);
             var frame = Capture.Grab(crop, ink);
             IncludeSnapshot(frame);
             await Task.Run(() => Capture.SavePng(frame, path));
@@ -272,8 +309,19 @@ internal sealed partial class FrameWindow : Window
     {
         if (!ready || Locked) return;
         configuring = true;
-        try { if (Hotkey.Prompt(this, hotkey) is { } next) Register(next, persist: true); }
-        catch (Exception ex) { ShowStatus($"Hotkey settings: {ex.Message}"); }
+        try
+        {
+            if (SettingsWindow.Prompt(this, hotkey, saveFolder) is not { } next) return;
+            bool folderChanged = !string.Equals(saveFolder, next.Folder, StringComparison.OrdinalIgnoreCase);
+            if (folderChanged)
+            {
+                CaptureFolder.Save(next.Folder);
+                saveFolder = next.Folder;
+            }
+            if (next.Shortcut != hotkey || hotkeyId == 0) Register(next.Shortcut, persist: true);
+            else ShowStatus($"Save folder: {saveFolder}");
+        }
+        catch (Exception ex) { ShowStatus($"Settings: {ex.Message}"); }
         finally { configuring = false; }
     }
 
@@ -315,6 +363,7 @@ internal sealed partial class FrameWindow : Window
         return 0;
     }
 
+    private string ReselectHint => fullScreen ? "Restore the region, then select Full screen again." : "Drag the top rail to reselect it.";
     private void UpdateSize() => size.Text = $"{crop.Width} × {crop.Height} px  |  PNG: {(hotkeyId == 0 ? "no hotkey" : hotkey)}{RecordingCaption}";
     private void ShowStatus(string message) { status.Text = message; status.Select(0, 0); }
 

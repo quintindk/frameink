@@ -13,7 +13,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\windows-smoke.ps
     -App .\src\FrameInk\bin\Release\net10.0-windows\FrameInk.exe
 ```
 
-Close other FrameInk instances. The smoke test moves the pointer and sends mouse and keyboard input to its synthetic window and FrameInk. Leave the desktop unlocked and do not interact with it while the test runs. The smoke test expects the default hotkey. `-MonitorIndex` selects an attached monitor by zero-based Windows enumeration index. `-PngOnly` skips video. Add `-TestHotkeyRebind` to exercise changing and restoring the shortcut when no `hotkey.json` exists. The test removes the setting it created.
+Close other FrameInk instances. The smoke test moves the pointer and sends mouse and keyboard input to its synthetic window and FrameInk. Leave the desktop unlocked and do not interact with it while the test runs. The smoke test expects the default hotkey and save folder. `-MonitorIndex` selects an attached monitor by zero-based Windows enumeration index. `-PngOnly` skips video. `-TestFullScreen` covers the whole monitor. `-TestHotkeyRebind` also tests a custom save folder and requires that neither `hotkey.json` nor `save-folder.json` exists. The test removes the settings it creates.
 
 To check the video independently, add `-KeepArtifacts` to the full run. It prints `VIDEO`, `PLAIN` and `MID` paths. Pass those paths to the following command with Python 3.8+, FFmpeg and FFprobe installed. WSL paths can be used for this offline check. These tools are not app dependencies.
 
@@ -39,3 +39,11 @@ python tests/check-video.py <VIDEO> <PLAIN> <MID>
 - Live monitor transfers, negative-origin desktop placement and mixed-DPI changes with multiple monitors. The available session exposed one display. A native topology or DPI change was not performed. The smoke test validates the display-change handling with a simulated message, not the full OS transition.
 - Capture from a GNOME Remote Desktop client window. No GNOME session with synthetic or sanitised content was available for this validation, so the smoke test used a local synthetic window instead.
 - Windows 10 or Windows N runtime, protected-content examples, long or high-resolution recording performance, and injected encoder or filesystem failures.
+
+## Full-screen and Settings follow-up
+
+Verified on the same Windows session using `-TestFullScreen -TestHotkeyRebind`:
+
+- Full screen expanded the crop to the complete **4096 × 2160** monitor. The toolbar still received physical clicks in Draw mode and the PNG matched the synthetic target pixel for pixel. Restore region returned to the exact prior crop. The mode switch was disabled during recording.
+- The short full-screen MP4 encoded at **4096 × 2160** and FFmpeg decoded it through to the end. This verified compatibility at that resolution, not sustained frame rate. Edge padding for odd dimensions passed component checks but was not tested on a physical odd-sized display.
+- Settings rejected a network path and persisted a custom local folder. PNG and MP4 saved there, and a PNG saved after restart still went there. Shortcut rebind and persistence checks also passed.

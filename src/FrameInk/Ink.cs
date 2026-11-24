@@ -47,6 +47,14 @@ internal sealed class Ink
 
     public void Clear() { current = null; marks.Clear(); steps = 0; }
 
+    public void Translate(int x, int y)
+    {
+        End();
+        var offset = new Vector(x, y);
+        foreach (var mark in marks)
+            for (int i = 0; i < mark.Points.Count; i++) mark.Points[i] += offset;
+    }
+
     public void Render(DrawingContext context, int width, int height)
     {
         context.PushClip(new RectangleGeometry(new(0, 0, width, height)));
@@ -97,14 +105,23 @@ internal sealed class Ink
 internal sealed class InkSurface(Ink ink) : FrameworkElement
 {
     public Crop Crop { get; set; }
+    public Crop? Toolbar { get; set; }
     protected override void OnRender(DrawingContext context)
     {
-        // A nonzero alpha gives Draw mode an HWND hit surface even where there is no ink.
-        context.DrawRectangle(new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)), null, new(RenderSize));
         if (!RenderSize.IsEmpty && Crop.Width > 0 && Crop.Height > 0)
         {
             context.PushTransform(new ScaleTransform(RenderSize.Width / Crop.Width, RenderSize.Height / Crop.Height));
+            var bounds = new Rect(0, 0, Crop.Width, Crop.Height);
+            if (Toolbar is { } bar)
+            {
+                // In Draw mode the owned ink HWND is above the toolbar. An alpha-zero hole lets the real controls receive clicks.
+                context.PushClip(new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(bounds),
+                    new RectangleGeometry(new(bar.X - Crop.X, bar.Y - Crop.Y, bar.Width, bar.Height))));
+            }
+            // Nonzero alpha gives Draw an HWND hit surface where there is no ink.
+            context.DrawRectangle(new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)), null, bounds);
             ink.Render(context, Crop.Width, Crop.Height);
+            if (Toolbar is not null) context.Pop();
             context.Pop();
         }
     }

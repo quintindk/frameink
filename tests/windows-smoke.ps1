@@ -4,6 +4,7 @@ param(
     [switch]$PngOnly,
     [int]$MonitorIndex = -1,
     [switch]$TestHotkeyRebind,
+    [switch]$TestFullScreen,
     [switch]$KeepArtifacts
 )
 $ErrorActionPreference = 'Stop'
@@ -147,7 +148,15 @@ $outputs = [Collections.Generic.List[string]]::new()
 Get-ChildItem -LiteralPath $captures -ErrorAction SilentlyContinue | ForEach-Object { [void]$seen.Add($_.FullName) }
 Assert (!(Get-Process -Name FrameInk -ErrorAction SilentlyContinue)) 'Close other FrameInk instances before running this test.'
 $config = Join-Path $env:LOCALAPPDATA 'FrameInk\hotkey.json'
+$folderConfig = Join-Path $env:LOCALAPPDATA 'FrameInk\save-folder.json'
+$testFolder = $null
+$wroteFolder = $false
 $wroteConfig = $false
+if (Test-Path -LiteralPath $folderConfig) {
+    Assert (!$TestHotkeyRebind) 'Settings persistence test only runs when there is no existing save-folder.json.'
+    $saved = Get-Content -LiteralPath $folderConfig -Raw | ConvertFrom-Json
+    Assert ($saved -eq $captures) 'Smoke test requires the default save folder. Existing settings were not changed.'
+}
 if (Test-Path -LiteralPath $config) {
     Assert (!$TestHotkeyRebind) 'Rebind test only runs when there is no existing FrameInk hotkey.json.'
     $binding = Get-Content -LiteralPath $config -Raw | ConvertFrom-Json
@@ -161,7 +170,7 @@ $form = [Windows.Forms.Form]::new()
 $form.Text = 'FrameInk synthetic test target'
 $form.FormBorderStyle = 'None'
 $form.StartPosition = 'Manual'
-$form.Bounds = $screen.WorkingArea
+$form.Bounds = if ($TestFullScreen) { $screen.Bounds } else { $screen.WorkingArea }
 $form.TopMost = $true
 $targetPattern = [Drawing.Bitmap]::new($form.Width, $form.Height)
 $graphics = [Drawing.Graphics]::FromImage($targetPattern)
@@ -330,11 +339,53 @@ try {
         'PASS display-change message interrupted and finalised the take, blocked stale PNG and required reselection'
     }
 
+    if ($TestFullScreen) {
+        Button 'Clear'
+        $previous = $crop
+        Button 'Full screen'
+        $crop = [Desktop]::Bounds($overlay)
+        Assert ($crop -eq $target) "Full screen does not match the actual monitor: $crop vs $target."
+        Assert ($crop -eq $screen.Bounds) 'Synthetic form does not cover the full monitor.'
+        foreach ($p in @(@(1,1),@(($crop.Width-4),1),@(1,($crop.Height-4)),@(($crop.Width-4),($crop.Height-4)))) {
+            Hit ($crop.X+$p[0]) ($crop.Y+$p[1]) $form.Handle
+        }
+        # Do not activate the synthetic topmost window here; it would cover the floating toolbar.
+        Hit ($crop.X+120) ($crop.Y+120) $form.Handle
+        Click-Control 'Pen' $chrome
+        Hit ($crop.X+120) ($crop.Y+120) $overlay
+        # A physical click proves that the toolbar still receives input above the full-screen ink surface.
+        Click-Control 'Save PNG' $chrome
+        $fullPng = Output 'png'
+        Check-Pattern $fullPng ([Drawing.Rectangle]::Empty)
+        if (!$PngOnly) {
+            Click-Control 'Record' $chrome
+            [void](Wait-For { Item 'Stop' } ('Full-screen recording did not start: ' + (Labels)))
+            Assert (!(Item 'Restore region').Current.IsEnabled) 'Full screen can be toggled while recording.'
+            Wait-Pump 900
+            Click-Control 'Stop' $chrome
+            $fullVideo = Output 'mp4'
+            [void](Wait-For { (Labels) -match 'MP4 saved:' } ('Full-screen recording did not save: ' + (Labels)))
+            if ($KeepArtifacts) { "FULL_VIDEO=$fullVideo"; "FULL_PNG=$fullPng" }
+        }
+        Button 'Draw'
+        Click-Control 'Restore region' $chrome
+        $crop = [Desktop]::Bounds($overlay)
+        Assert ($crop -eq $previous) "Exiting full screen did not restore the previous crop: $crop vs $previous."
+        'PASS full-monitor bounds, usable toolbar in Draw, chrome-free whole-screen PNG, and exact region restoration'
+    }
+
     if ($TestHotkeyRebind) {
-        Button 'Hotkey'
-        $dialog = Wait-For { $h = [Desktop]::Find($process.Id,'FrameInk PNG shortcut'); if ($h -ne [intptr]::Zero) { $h } } 'Hotkey settings did not open.'
+        Button 'Settings'
+        $dialog = Wait-For { $h = [Desktop]::Find($process.Id,'FrameInk Settings'); if ($h -ne [intptr]::Zero) { $h } } 'Settings did not open.'
         $frameRoot = $script:root
         $script:root = [Windows.Automation.AutomationElement]::FromHandle($dialog)
+        $folder = Item 'Save folder'
+        $field = $folder.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)
+        $field.SetValue('\\example.invalid\capture')
+        Button 'Apply'
+        [void](Wait-For { (Labels) -match 'not a network path' } 'Network save folder was not rejected in Settings.')
+        $testFolder = Join-Path $env:TEMP ('FrameInk-smoke-' + [guid]::NewGuid().ToString('N'))
+        $field.SetValue($testFolder)
         $f9 = Wait-For {
             $condition = [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::NameProperty, 'F9')
             $script:root.FindAll([Windows.Automation.TreeScope]::Descendants, $condition) | Where-Object {
@@ -343,7 +394,9 @@ try {
         } 'F9 was not available in the settings selector.'
         $f9.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
         $wroteConfig = $true
+        $wroteFolder = $true
         Button 'Apply'
+        $captures = $testFolder
         $script:root = $frameRoot
         [void](Wait-For { (Labels) -match 'PNG: Ctrl\+Shift\+F9' } 'Rebound hotkey was not active.')
         Assert ([Desktop]::RegisterHotKey([intptr]::Zero,98,6,121)) 'Old hotkey was not released.'
@@ -354,20 +407,32 @@ try {
         $after = Output 'png'
         Assert ((Get-FileHash -LiteralPath $before).Hash -eq (Get-FileHash -LiteralPath $after).Hash) 'Rebound hotkey PNG differs.'
         if (!$PngOnly) { Check-Pattern $after ([Drawing.Rectangle]::Empty) }
+        if (!$PngOnly) {
+            Button 'Record'
+            Wait-Pump 450
+            Button 'Stop'
+            [void](Output 'mp4')
+        }
         Button 'Close'
         Assert ($process.WaitForExit(5000)) 'FrameInk did not shut down after rebinding.'
         $process = Start-Process -FilePath ([IO.Path]::GetFullPath($App)) -PassThru
         $chrome = Wait-For { $h = [Desktop]::Find($process.Id,'FrameInk'); if ($h -ne [intptr]::Zero) { $h } } 'FrameInk did not restart.'
         $script:root = [Windows.Automation.AutomationElement]::FromHandle($chrome)
         [void](Wait-For { (Labels) -match 'PNG: Ctrl\+Shift\+F9' } 'The rebound hotkey did not survive restart.')
-        'PASS settings UI rebind, old shortcut released, rebound shortcut PNG matches and binding survives restart'
+        Button 'Save PNG'
+        [void](Output 'png')
+        'PASS Settings persists a custom local save folder and rebound hotkey; network path rejected'
     }
 } finally {
     if ($process -and !$process.HasExited) { [void]$process.CloseMainWindow(); if (!$process.WaitForExit(5000)) { $process.Kill() } }
     $form.Dispose()
     $targetPattern.Dispose()
     if ($wroteConfig) { Remove-Item -LiteralPath $config -ErrorAction SilentlyContinue }
+    if ($wroteFolder) { Remove-Item -LiteralPath $folderConfig -ErrorAction SilentlyContinue }
     if (!$KeepArtifacts) { foreach ($path in $outputs) { Remove-Item -LiteralPath $path -ErrorAction SilentlyContinue } }
+    if ($testFolder -and (Test-Path -LiteralPath $testFolder) -and !(Get-ChildItem -LiteralPath $testFolder)) {
+        Remove-Item -LiteralPath $testFolder -ErrorAction SilentlyContinue
+    }
     [void][Desktop]::SetCursorPos($originalCursor.X,$originalCursor.Y)
     if ($oldDpi -ne [intptr]::Zero) { [void][Desktop]::SetThreadDpiAwarenessContext($oldDpi) }
 }

@@ -18,6 +18,14 @@ internal readonly record struct Display(nint Handle, Crop Bounds, Crop Work, uin
     public int Border => Pixels(8);
     public int Bar => Pixels(96);
 
+    public Crop Chrome(Crop crop, bool fullScreen)
+    {
+        if (!fullScreen) return new(crop.X - Border, crop.Y - Border, crop.Width + 2 * Border, crop.Height + Border + Bar);
+        int width = Math.Min(Work.Width, Pixels(650));
+        if (width < Pixels(530) || Work.Height < Bar) throw new InvalidOperationException("This monitor is too small for the toolbar.");
+        return new(Work.X + (Work.Width - width) / 2, Work.Bottom - Bar - Math.Min(Pixels(12), Work.Height - Bar), width, Bar);
+    }
+
     public Crop Fit(Crop request)
     {
         int border = Border;

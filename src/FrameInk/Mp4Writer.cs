@@ -31,14 +31,16 @@ internal sealed unsafe class Mp4Writer : IDisposable
     private nint writer;
     private uint stream;
     private bool com, mediaFoundation;
-    private readonly int width, height;
+    private readonly int width, height, sourceWidth, sourceHeight;
     private readonly byte[] pixels;
 
     public Mp4Writer(string path, int width, int height)
     {
-        this.width = width;
-        this.height = height;
-        pixels = new byte[checked(width * height * 4)];
+        sourceWidth = width;
+        sourceHeight = height;
+        this.width = (width + 1) & ~1;
+        this.height = (height + 1) & ~1;
+        pixels = new byte[checked(this.width * this.height * 4)];
         try
         {
             Check(CoInitializeEx(0, 0), "Initialise COM");
@@ -50,7 +52,7 @@ internal sealed unsafe class Mp4Writer : IDisposable
             nint output = Type(H264);
             try
             {
-                SetUInt(output, AverageBitrate, (uint)Math.Clamp((long)width * height * 5, 1_500_000, 35_000_000));
+                SetUInt(output, AverageBitrate, (uint)Math.Clamp((long)this.width * this.height * 5, 1_500_000, 35_000_000));
                 uint index;
                 Check(((delegate* unmanaged[Stdcall]<nint, nint, uint*, int>)Slot(writer, 3))(writer, output, &index), "Add H.264 stream");
                 stream = index;
@@ -70,8 +72,9 @@ internal sealed unsafe class Mp4Writer : IDisposable
 
     public void Write(BitmapSource frame, long time, long duration)
     {
-        if (frame.PixelWidth != width || frame.PixelHeight != height) throw new InvalidOperationException("Recording frame dimensions changed.");
+        if (frame.PixelWidth != sourceWidth || frame.PixelHeight != sourceHeight) throw new InvalidOperationException("Recording frame dimensions changed.");
         frame.CopyPixels(pixels, width * 4, 0);
+        Nv12Pixels.ExtendEdges(pixels, sourceWidth, sourceHeight, width, height);
         int bytes = checked(width * height * 3 / 2);
         Check(MFCreateMemoryBuffer(bytes, out nint buffer), "Allocate video sample buffer");
         try

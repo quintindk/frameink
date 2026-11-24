@@ -23,6 +23,7 @@ internal static class Program
         var full = display.Fit(new(-9999, 10000, 9999, 9999));
         Check(full == new Crop(-1910, -70, 1900, 910), "Clamp rails and toolbar within negative-origin work area");
         Check(display.Fit(new(1, 999, 3, 5)) == new Crop(-674, 740, 664, 100), "Minimum crop and bottom-right clamp");
+        Check(display.Chrome(display.Bounds, true) == new Crop(-1367, 825, 813, 120), "Centred full-screen toolbar above the work area edge");
         Throws<InvalidOperationException>(() => (display with { Work = new(-400, 0, 400, 250) }).Fit(full));
     }
 
@@ -68,6 +69,11 @@ internal static class Program
         Nv12Pixels.Convert(input, output, 2, 2);
         Check(output.SequenceEqual(new byte[] { 16, 235, 82, 41, 146, 151 }), "Top-down luma and shared U/V");
         Throws<ArgumentException>(() => Nv12Pixels.Convert(input, output, 1, 4));
+        var padded = new byte[16];
+        new byte[] { 7, 8, 9, 255 }.CopyTo(padded, 0);
+        Nv12Pixels.ExtendEdges(padded, 1, 1, 2, 2);
+        Check(padded.SequenceEqual(Enumerable.Repeat(new byte[] { 7, 8, 9, 255 }, 4).SelectMany(x => x)),
+            "Odd video edge duplicates the final real column and row");
     }
 
     private static byte[] Bytes(BitmapSource bitmap)

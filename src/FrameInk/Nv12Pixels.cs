@@ -4,6 +4,16 @@ namespace FrameInk;
 
 internal static class Nv12Pixels
 {
+    // Preserve every desktop pixel on odd-sized monitors. NV12 needs an even stride and height.
+    public static void ExtendEdges(Span<byte> pixels, int sourceWidth, int sourceHeight, int width, int height)
+    {
+        int stride = width * 4;
+        if (sourceWidth < width)
+            for (int y = 0; y < sourceHeight; y++)
+                pixels.Slice(y * stride + stride - 8, 4).CopyTo(pixels.Slice(y * stride + stride - 4, 4));
+        if (sourceHeight < height)
+            pixels.Slice((sourceHeight - 1) * stride, stride).CopyTo(pixels.Slice(sourceHeight * stride, stride));
+    }
     // Top-down, opaque BGRA to limited-range BT.601 NV12. Luma is per pixel; each 2x2 tile shares averaged chroma.
     public static void Convert(ReadOnlySpan<byte> bgra, Span<byte> nv12, int width, int height)
     {
