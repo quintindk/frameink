@@ -46,3 +46,7 @@ To package a version locally on Windows:
 ```powershell
 .\scripts\package-release.ps1 -Version 0.1.0
 ```
+
+## Licence
+
+FrameInk is licensed under the [MIT License](LICENSE). Bundled .NET components retain their own licence notices.

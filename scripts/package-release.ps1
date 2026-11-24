@@ -23,6 +23,8 @@ try {
         }
     }
 
+    Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination $bundle
+
     # Redistribute the licence and notices from the runtime packs actually used by this build.
     $assets = Get-Content -LiteralPath (Join-Path $repo 'src\FrameInk\obj\project.assets.json') -Raw | ConvertFrom-Json
     $deps = Get-Content -LiteralPath (Join-Path $bundle 'FrameInk.deps.json') -Raw | ConvertFrom-Json
